@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Cijferend optellen</title>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    :root {
+        /* Ruimte rond de pagina en breedte van het plusteken; schalen mee met het scherm */
+        --pad: clamp(6px, 1.6vmin, 24px);
+        --plus-w: clamp(22px, 6vmin, 80px);
+        --gap: clamp(4px, 1vmin, 14px);
+    }
+
+    html,
+    body {
+        margin: 0;
+        background: #f5f7fa;
+    }
+
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #263238;
+    }
+
+    /* De kaart vult het hele scherm (digibord, tablet, telefoon) */
+    .container {
+        margin: var(--pad);
+        height: calc(100vh - 2 * var(--pad));
+        height: calc(100dvh - 2 * var(--pad));
+        min-height: 380px;
+
+        display: flex;
+        flex-direction: column;
+
+        background: white;
+        border-radius: clamp(12px, 2.4vmin, 32px);
+        padding: clamp(10px, 2.2vmin, 40px);
+        box-shadow: 0 5px 25px rgba(0,0,0,0.10);
+    }
+
+    h1 {
+        text-align: center;
+        margin: 0 0 0.15em;
+        font-size: clamp(22px, 5vmin, 64px);
+        line-height: 1.1;
+        color: #37474f;
+    }
+
+    .instruction {
+        text-align: center;
+        font-size: clamp(14px, 2.5vmin, 30px);
+        margin-bottom: clamp(8px, 2vmin, 28px);
+        color: #607d8b;
+    }
+
+    /* =========================
+       REKENGEBIED
+       ========================= */
+
+    .calc-area {
+        flex: 1;
+        min-height: 0;
+        /* ruimte rechts voor het plusteken */
+        padding-right: var(--plus-w);
+    }
+
+    .calculation {
+        height: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows:
+            auto        /* kolomnamen */
+            0.65fr      /* onthoudgetallen */
+            1fr         /* eerste getal */
+            1fr         /* tweede getal */
+            auto        /* streep */
+            1.1fr;      /* uitkomst */
+        gap: var(--gap);
+    }
+
+    /* =========================
+       KOLOMNAMEN
+       ========================= */
+
+    .column-label {
+        text-align: center;
+        font-size: clamp(10px, 2.1vmin, 30px);
+        font-weight: bold;
+        padding: 0.6em 0.2em;
+        border-radius: 12px 12px 0 0;
+        hyphens: manual;
+        overflow-wrap: anywhere;
+        line-height: 1.15;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Op brede schermen is er genoeg ruimte voor grotere koppen */
+    @media (min-aspect-ratio: 1/1) {
+        .column-label {
+            font-size: clamp(12px, 2.6vmin, 36px);
+        }
+    }
+
+    .thousands, .col-1000 { background: #e3f2fd; }
+    .hundreds,  .col-100  { background: #e8f5e9; }
+    .tens,      .col-10   { background: #fff3e0; }
+    .units,     .col-1    { background: #fce4ec; }
+
+    /* =========================
+       CELLEN
+       Elke cel is een "container" zodat de invulvakken
+       meeschalen met de beschikbare ruimte (cqw / cqh).
+       ========================= */
+
+    .cell {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        container-type: size;
+        min-height: 0;
+        border-radius: clamp(8px, 1.6vmin, 18px);
+    }
+
+    /* =========================
+       INVULVAKKEN
+       ========================= */
+
+    input {
+        font-family: inherit;
+        text-align: center;
+        font-weight: bold;
+        color: #263238;
+        border: clamp(2px, 0.4vmin, 5px) solid rgba(69,90,100,0.25);
+        border-radius: clamp(8px, 1.6vmin, 18px);
+        background: rgba(255,255,255,0.9);
+        outline: none;
+        padding: 0;
+        transition: all 0.15s ease;
+    }
+
+    input:focus {
+        border-color: #546e7a;
+        box-shadow: 0 0 0 clamp(3px, 0.5vmin, 6px) rgba(84,110,122,0.18);
+    }
+
+    .carry-input {
+        width: min(72cqw, 80cqh);
+        height: 80cqh;
+        font-size: min(48cqh, 45cqw);
+        border-radius: 10px;
+    }
+
+    .number-input {
+        width: min(86cqw, 80cqh);
+        height: 88cqh;
+        font-size: min(56cqh, 55cqw);
+    }
+
+    .answer-input {
+        width: min(86cqw, 80cqh);
+        height: 88cqh;
+        font-size: min(56cqh, 55cqw);
+        background: white;
+    }
+
+    .carry-input.correct,
+    .carry-input.incorrect {
+        font-weight: bold;
+    }
+
+    .carry-input.correct   { border-color: #43a047; background: #e8f5e9; color: #2e7d32; }
+    .carry-input.incorrect { border-color: #e53935; background: #ffebee; color: #c62828; }
+
+    .answer-input.correct   { border-color: #43a047; background: #e8f5e9; }
+    .answer-input.incorrect { border-color: #e53935; background: #ffebee; }
+
+    /* =========================
+       FEEDBACK (✓ en ✕)
+       ========================= */
+
+    .feedback,
+    .carry-feedback {
+        position: absolute;
+        right: 3%;
+        top: 3%;
+
+        width: min(34cqh, 28cqw);
+        height: min(34cqh, 28cqw);
+        font-size: min(22cqh, 18cqw);
+
+        border-radius: 50%;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        color: white;
+    }
+
+    .feedback.correct,
+    .carry-feedback.correct {
+        display: flex;
+        background: #43a047;
+    }
+
+    .feedback.incorrect,
+    .carry-feedback.incorrect {
+        display: flex;
+        background: #e53935;
+    }
+
+    /* =========================
+       PLUS-TEKEN
+       ========================= */
+
+    .plus-sign {
+        position: absolute;
+        left: 100%;
+        top: 50%;
+        transform: translateY(-50%);
+        width: var(--plus-w);
+        text-align: center;
+        font-size: calc(var(--plus-w) * 0.95);
+        line-height: 1;
+        font-weight: bold;
+        color: #37474f;
+    }
+
+    /* =========================
+       STREEP
+       ========================= */
+
+    .line {
+        grid-column: 1 / -1;
+        height: clamp(4px, 0.7vmin, 9px);
+        background: #37474f;
+        border-radius: 5px;
+    }
+
+    /* =========================
+       KNOPPEN
+       ========================= */
+
+    .buttons {
+        display: flex;
+        justify-content: center;
+        gap: clamp(10px, 2vmin, 28px);
+        margin-top: clamp(8px, 2vmin, 28px);
+    }
+
+    button {
+        border: none;
+        border-radius: 0.7em;
+        padding: 0.7em 1.6em;
+        font-family: inherit;
+        font-size: clamp(16px, 3vmin, 40px);
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.1s ease, opacity 0.1s ease;
+    }
+
+    button:hover {
+        opacity: 0.9;
+    }
+
+    button:active {
+        transform: scale(0.97);
+    }
+
+    button:focus-visible {
+        outline: 3px solid #546e7a;
+        outline-offset: 3px;
+    }
+
+    .check {
+        background: #43a047;
+        color: white;
+    }
+
+    .new-sum {
+        background: #546e7a;
+        color: white;
+    }
+
+    /* =========================
+       SMALLE SCHERMEN (telefoon rechtop)
+       ========================= */
+
+    @media (max-width: 520px) {
+        .buttons button {
+            flex: 1;
+            padding: 0.7em 0.5em;
+        }
+    }
+
+    /* =========================
+       LAGE SCHERMEN (telefoon liggend)
+       ========================= */
+
+    @media (max-height: 520px) {
+        .instruction {
+            display: none;
+        }
+
+        h1 {
+            font-size: clamp(18px, 5vmin, 30px);
+            margin-bottom: 6px;
+        }
+
+        .container {
+            padding: 8px 12px;
+        }
+
+        .buttons {
+            margin-top: 6px;
+        }
+
+        button {
+            padding: 0.45em 1.4em;
+            font-size: 16px;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Cijferend optellen</h1>
+
+    <div class="instruction">
+        Vul de twee getallen in en reken de som cijferend uit.
+    </div>
+
+    <div class="calc-area">
+
+        <div class="calculation">
+
+            <!-- KOLOMNAMEN -->
+
+            <div class="column-label thousands">Dui&shy;zend&shy;tallen</div>
+            <div class="column-label hundreds">Hon&shy;derd&shy;tallen</div>
+            <div class="column-label tens">Tien&shy;tallen</div>
+            <div class="column-label units">Een&shy;heden</div>
+
+
+            <!-- RIJ 1: ONTHOUDGETALLEN -->
+
+            <div class="cell col-1000">
+                <input class="carry-input" id="carry-1000" type="text" inputmode="numeric" maxlength="1" aria-label="Onthoudgetal bij duizendtallen">
+                <div class="carry-feedback"></div>
+            </div>
+
+            <div class="cell col-100">
+                <input class="carry-input" id="carry-100" type="text" inputmode="numeric" maxlength="1" aria-label="Onthoudgetal bij honderdtallen">
+                <div class="carry-feedback"></div>
+            </div>
+
+            <div class="cell col-10">
+                <input class="carry-input" id="carry-10" type="text" inputmode="numeric" maxlength="1" aria-label="Onthoudgetal bij tientallen">
+                <div class="carry-feedback"></div>
+            </div>
+
+            <div class="cell col-1">
+                <input class="carry-input" id="carry-1" type="text" inputmode="numeric" maxlength="1" aria-label="Onthoudgetal bij eenheden">
+                <div class="carry-feedback"></div>
+            </div>
+
+
+            <!-- RIJ 2: EERSTE GETAL -->
+
+            <div class="cell col-1000">
+                <input class="number-input first-number" type="text" inputmode="numeric" maxlength="1" data-column="0" aria-label="Duizendtallen eerste getal">
+            </div>
+
+            <div class="cell col-100">
+                <input class="number-input first-number" type="text" inputmode="numeric" maxlength="1" data-column="1" aria-label="Honderdtallen eerste getal">
+            </div>
+
+            <div class="cell col-10">
+                <input class="number-input first-number" type="text" inputmode="numeric" maxlength="1" data-column="2" aria-label="Tientallen eerste getal">
+            </div>
+
+            <div class="cell col-1">
+                <input class="number-input first-number" type="text" inputmode="numeric" maxlength="1" data-column="3" aria-label="Eenheden eerste getal">
+            </div>
+
+
+            <!-- RIJ 3: TWEEDE GETAL -->
+
+            <div class="cell col-1000">
+                <input class="number-input second-number" type="text" inputmode="numeric" maxlength="1" data-column="0" aria-label="Duizendtallen tweede getal">
+            </div>
+
+            <div class="cell col-100">
+                <input class="number-input second-number" type="text" inputmode="numeric" maxlength="1" data-column="1" aria-label="Honderdtallen tweede getal">
+            </div>
+
+            <div class="cell col-10">
+                <input class="number-input second-number" type="text" inputmode="numeric" maxlength="1" data-column="2" aria-label="Tientallen tweede getal">
+            </div>
+
+            <div class="cell col-1">
+                <input class="number-input second-number" type="text" inputmode="numeric" maxlength="1" data-column="3" aria-label="Eenheden tweede getal">
+                <div class="plus-sign">+</div>
+            </div>
+
+
+            <!-- STREEP -->
+
+            <div class="line"></div>
+
+
+            <!-- RIJ 4: UITKOMST -->
+
+            <div class="cell col-1000">
+                <input class="answer-input" type="text" inputmode="numeric" maxlength="1" data-column="0" aria-label="Uitkomst duizendtallen">
+                <div class="feedback"></div>
+            </div>
+
+            <div class="cell col-100">
+                <input class="answer-input" type="text" inputmode="numeric" maxlength="1" data-column="1" aria-label="Uitkomst honderdtallen">
+                <div class="feedback"></div>
+            </div>
+
+            <div class="cell col-10">
+                <input class="answer-input" type="text" inputmode="numeric" maxlength="1" data-column="2" aria-label="Uitkomst tientallen">
+                <div class="feedback"></div>
+            </div>
+
+            <div class="cell col-1">
+                <input class="answer-input" type="text" inputmode="numeric" maxlength="1" data-column="3" aria-label="Uitkomst eenheden">
+                <div class="feedback"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- KNOPPEN -->
+
+    <div class="buttons">
+
+        <button class="check" onclick="checkAnswers()">
+            Controleren
+        </button>
+
+        <button class="new-sum" onclick="newSum()">
+            Nieuwe som
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+    /* =========================================
+       INPUTS
+       ========================================= */
+
+    const firstInputs =
+        document.querySelectorAll(".first-number");
+
+    const secondInputs =
+        document.querySelectorAll(".second-number");
+
+    const answerInputs =
+        document.querySelectorAll(".answer-input");
+
+    const carryInputs =
+        document.querySelectorAll(".carry-input");
+
+
+    /* =========================================
+       ALLEEN CIJFERS TOESTAAN
+       ========================================= */
+
+    function onlyDigit(input) {
+
+        input.addEventListener("input", function () {
+
+            this.value =
+                this.value.replace(/[^0-9]/g, "");
+
+        });
+
+
+        input.addEventListener("keydown", function(event) {
+
+            if (
+                event.key === "ArrowLeft" ||
+                event.key === "ArrowRight" ||
+                event.key === "Backspace" ||
+                event.key === "Delete" ||
+                event.key === "Tab"
+            ) {
+                return;
+            }
+
+
+            if (!/[0-9]/.test(event.key)) {
+
+                event.preventDefault();
+
+            }
+
+        });
+
+    }
+
+
+    firstInputs.forEach(onlyDigit);
+
+    secondInputs.forEach(onlyDigit);
+
+    answerInputs.forEach(onlyDigit);
+
+    carryInputs.forEach(onlyDigit);
+
+
+    /* =========================================
+       DE TWEE GETALLEN OPHALEN
+       ========================================= */
+
+    function getNumbers() {
+
+        let first = [];
+
+        let second = [];
+
+
+        firstInputs.forEach(input => {
+
+            first.push(
+                input.value === ""
+                    ? 0
+                    : Number(input.value)
+            );
+
+        });
+
+
+        secondInputs.forEach(input => {
+
+            second.push(
+                input.value === ""
+                    ? 0
+                    : Number(input.value)
+            );
+
+        });
+
+
+        const firstNumber =
+            first[0] * 1000 +
+            first[1] * 100 +
+            first[2] * 10 +
+            first[3];
+
+        const secondNumber =
+            second[0] * 1000 +
+            second[1] * 100 +
+            second[2] * 10 +
+            second[3];
+
+
+        return {
+            first: first,
+            second: second,
+            firstNumber: firstNumber,
+            secondNumber: secondNumber
+        };
+
+    }
+
+
+    /* =========================================
+       JUISTE ONTHOUDGETALLEN BEREKENEN
+       ========================================= */
+
+    function getCorrectCarries() {
+
+        const numbers =
+            getNumbers();
+
+        const first =
+            numbers.first;
+
+        const second =
+            numbers.second;
+
+
+        let correctCarry10 = 0;
+
+        let correctCarry100 = 0;
+
+        let correctCarry1000 = 0;
+
+
+        /*
+         * Eenheden
+         */
+
+        let unitsSum =
+            first[3] +
+            second[3];
+
+        if (unitsSum >= 10) {
+
+            correctCarry10 = 1;
+
+        }
+
+
+        /*
+         * Tientallen
+         */
+
+        let tensSum =
+            first[2] +
+            second[2] +
+            correctCarry10;
+
+        if (tensSum >= 10) {
+
+            correctCarry100 = 1;
+
+        }
+
+
+        /*
+         * Honderdtallen
+         */
+
+        let hundredsSum =
+            first[1] +
+            second[1] +
+            correctCarry100;
+
+        if (hundredsSum >= 10) {
+
+            correctCarry1000 = 1;
+
+        }
+
+
+        return {
+
+            carry1000: correctCarry1000,
+
+            carry100: correctCarry100,
+
+            carry10: correctCarry10,
+
+            carry1: 0
+
+        };
+
+    }
+
+
+    /* =========================================
+       ANTWOORD CONTROLEREN
+       ========================================= */
+
+    function checkAnswers() {
+
+        const numbers =
+            getNumbers();
+
+        const correctCarries =
+            getCorrectCarries();
+
+
+        /* =====================================
+           ONTHOUDGETALLEN CONTROLEREN
+           ===================================== */
+
+        checkCarry(
+            document.getElementById("carry-1000"),
+            correctCarries.carry1000
+        );
+
+        checkCarry(
+            document.getElementById("carry-100"),
+            correctCarries.carry100
+        );
+
+        checkCarry(
+            document.getElementById("carry-10"),
+            correctCarries.carry10
+        );
+
+        /*
+         * Het laatste onthoudvakje heeft altijd
+         * de juiste waarde 0.
+         */
+        checkCarry(
+            document.getElementById("carry-1"),
+            correctCarries.carry1
+        );
+
+
+        /* =====================================
+           UITKOMST CONTROLEREN
+           ===================================== */
+
+        const result =
+            numbers.firstNumber +
+            numbers.secondNumber;
+
+        const resultString =
+            String(result).padStart(4, "0");
+
+        const correctDigits =
+            resultString
+                .split("")
+                .map(Number);
+
+        /*
+         * Index van het eerste cijfer van de uitkomst
+         * (de eenheden tellen altijd mee).
+         */
+
+        const firstDigitIndex =
+            Math.min(
+                4 - String(result).length,
+                3
+            );
+
+
+        answerInputs.forEach((input, index) => {
+
+            const feedback =
+                input.parentElement
+                    .querySelector(".feedback");
+
+
+            /*
+             * Oude feedback wissen.
+             */
+
+            input.classList.remove("correct");
+
+            input.classList.remove("incorrect");
+
+            feedback.className = "feedback";
+
+            feedback.textContent = "";
+
+
+            /*
+             * SPECIALE REGEL VOOR HET EERSTE
+             * ANTWOORDVAK (DUIZENDTALLEN)
+             *
+             * Alleen wanneer het juiste cijfer 0 is:
+             *
+             * - leeg = neutraal
+             * - 0 = goed
+             * - ander cijfer = fout
+             */
+
+            /*
+             * Alle vakjes links van het eerste cijfer van de
+             * uitkomst (voorloopnullen) blijven neutraal als
+             * ze leeg zijn. Bij 5 + 4 = 9 geldt dat voor
+             * duizendtallen, honderdtallen en tientallen;
+             * bij 21 + 34 = 55 voor duizendtallen en
+             * honderdtallen. Het eenhedenvakje moet altijd
+             * ingevuld worden.
+             */
+
+            if (index < firstDigitIndex) {
+
+                if (input.value === "") {
+
+                    return;
+
+                }
+
+            }
+
+
+            /*
+             * Voor alle andere gevallen:
+             *
+             * leeg = fout.
+             */
+
+            if (input.value === "") {
+
+                input.classList.add("incorrect");
+
+                feedback.classList.add("incorrect");
+
+                feedback.textContent = "✕";
+
+                return;
+
+            }
+
+
+            const answer =
+                Number(input.value);
+
+
+            /*
+             * Goed antwoord.
+             */
+
+            if (
+                answer ===
+                correctDigits[index]
+            ) {
+
+                input.classList.add("correct");
+
+                feedback.classList.add("correct");
+
+                feedback.textContent = "✓";
+
+            }
+
+
+            /*
+             * Fout antwoord.
+             */
+
+            else {
+
+                input.classList.add("incorrect");
+
+                feedback.classList.add("incorrect");
+
+                feedback.textContent = "✕";
+
+            }
+
+        });
+
+    }
+
+
+    /* =========================================
+       ONTHOUDGETAL CONTROLEREN
+       ========================================= */
+
+    function checkCarry(input, correctValue) {
+
+        const feedback =
+            input.parentElement
+                .querySelector(".carry-feedback");
+
+
+        /*
+         * Oude feedback wissen.
+         */
+
+        input.classList.remove("correct");
+
+        input.classList.remove("incorrect");
+
+        feedback.className = "carry-feedback";
+
+        feedback.textContent = "";
+
+
+        /*
+         * SPECIALE REGEL:
+         *
+         * Wanneer de juiste waarde 0 is:
+         *
+         * - leeg = neutraal
+         * - 0 = goed
+         * - iets anders = fout
+         */
+
+        if (correctValue === 0) {
+
+            if (input.value === "") {
+
+                return;
+
+            }
+
+
+            if (input.value === "0") {
+
+                input.classList.add("correct");
+
+                feedback.classList.add("correct");
+
+                feedback.textContent = "✓";
+
+            }
+
+            else {
+
+                input.classList.add("incorrect");
+
+                feedback.classList.add("incorrect");
+
+                feedback.textContent = "✕";
+
+            }
+
+
+            return;
+
+        }
+
+
+        /*
+         * Wanneer er wél een 1 nodig is:
+         *
+         * - leeg = fout
+         * - 1 = goed
+         * - iets anders = fout
+         */
+
+        if (
+            input.value ===
+            String(correctValue)
+        ) {
+
+            input.classList.add("correct");
+
+            feedback.classList.add("correct");
+
+            feedback.textContent = "✓";
+
+        }
+
+        else {
+
+            input.classList.add("incorrect");
+
+            feedback.classList.add("incorrect");
+
+            feedback.textContent = "✕";
+
+        }
+
+    }
+
+
+    /* =========================================
+       ALLES WISSEN
+       ========================================= */
+
+    function clearAll() {
+
+        document
+            .querySelectorAll("input")
+            .forEach(input => {
+
+                input.value = "";
+
+                input.classList.remove("correct");
+
+                input.classList.remove("incorrect");
+
+            });
+
+
+        document
+            .querySelectorAll(".feedback")
+            .forEach(el => {
+
+                el.className = "feedback";
+
+                el.textContent = "";
+
+            });
+
+
+        document
+            .querySelectorAll(".carry-feedback")
+            .forEach(el => {
+
+                el.className = "carry-feedback";
+
+                el.textContent = "";
+
+            });
+
+    }
+
+
+    /* =========================================
+       NIEUWE SOM
+       (wist alles, net als de oude knop Wissen)
+       ========================================= */
+
+    function newSum() {
+
+        clearAll();
+
+        /*
+         * De cursor springt naar het achterste vak
+         * (eenheden) van het eerste getal, zodat de
+         * kinderen van achter naar voren werken.
+         */
+        firstInputs[3].focus();
+
+    }
+
+
+    /* =========================================
+       BIJ HET OPENEN VAN DE PAGINA
+       ========================================= */
+
+    firstInputs[3].focus();
+
+</script>
+
+</body>
+</html>
